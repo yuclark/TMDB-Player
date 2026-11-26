@@ -71,8 +71,10 @@ export function Navbar({ onOpenSearch, showLogout, onLogout }: NavbarProps) {
             onClick={onOpenSearch}
             aria-label="Search movies and series"
           >
-            <Search size={15} />
-            <span>Search titles...</span>
+            <span className="search-trigger-left">
+              <Search size={15} />
+              <span className="search-trigger-label">Search titles...</span>
+            </span>
             <kbd className="search-kbd">/</kbd>
           </button>
 

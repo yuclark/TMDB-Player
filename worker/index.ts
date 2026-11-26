@@ -39,6 +39,33 @@ function getMimeType(pathname: string): string {
   return MIME_TYPES[pathname.slice(dot).toLowerCase()] ?? 'application/octet-stream';
 }
 
+const ALLOWED_CORS_ORIGINS = new Set([
+  'https://yuclark.github.io',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]);
+
+function getCorsHeaders(request: Request): Headers {
+  const headers = new Headers();
+  const origin = request.headers.get('Origin');
+  if (origin && ALLOWED_CORS_ORIGINS.has(origin)) {
+    headers.set('Access-Control-Allow-Origin', origin);
+    headers.set('Access-Control-Allow-Credentials', 'true');
+    headers.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
+    headers.set('Vary', 'Origin');
+  }
+  return headers;
+}
+
+function withCors(request: Request, response: Response): Response {
+  const cors = getCorsHeaders(request);
+  if (!cors.has('Access-Control-Allow-Origin')) return response;
+  const headers = new Headers(response.headers);
+  cors.forEach((value, key) => headers.set(key, value));
+  return new Response(response.body, { status: response.status, headers });
+}
+
 function jsonResponse(data: unknown, status = 200, headers: HeadersInit = {}): Response {
   const merged = new Headers(headers);
   merged.set('Content-Type', 'application/json; charset=utf-8');
@@ -236,24 +263,28 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
+    if (url.pathname.startsWith('/api/') && request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: getCorsHeaders(request) });
+    }
+
     if (url.pathname.startsWith('/api/auth/')) {
-      return handleAuth(request, url, env);
+      return withCors(request, await handleAuth(request, url, env));
     }
 
     if (url.pathname.startsWith('/api/')) {
       const authed = await isAuthenticated(request, env);
       if (!authed) {
-        return jsonResponse({ error: 'Authentication required' }, 401);
+        return withCors(request, jsonResponse({ error: 'Authentication required' }, 401));
       }
 
       try {
         if (url.pathname.startsWith('/api/tmdb/')) {
-          return await handleTmdbProxy(request, url, env);
+          return withCors(request, await handleTmdbProxy(request, url, env));
         }
-        return jsonResponse({ error: 'Not found' }, 404);
+        return withCors(request, jsonResponse({ error: 'Not found' }, 404));
       } catch (err) {
         console.error(JSON.stringify({ event: 'api_error', path: url.pathname, message: String(err) }));
-        return jsonResponse({ error: 'Internal server error' }, 500);
+        return withCors(request, jsonResponse({ error: 'Internal server error' }, 500));
       }
     }
 

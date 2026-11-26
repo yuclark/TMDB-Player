@@ -23,14 +23,16 @@ const REVIEW_SITES: Record<MediaType, ReviewSiteKey[]> = {
   tv: ['imdb', 'rottentomatoes', 'serializd', 'metacritic', 'trakt', 'tmdb'],
 };
 
+const BASE = import.meta.env.BASE_URL || '/';
+
 const SITE_INFO: Record<ReviewSiteKey, { name: string; icon: string }> = {
-  imdb: { name: 'IMDb', icon: '/icons/sites/imdb.jpg' },
-  letterboxd: { name: 'Letterboxd', icon: '/icons/sites/letterboxd.png' },
-  rottentomatoes: { name: 'Rotten Tomatoes', icon: '/icons/sites/rottentomatoes.png' },
-  serializd: { name: 'Serializd', icon: '/icons/sites/serializd.png' },
-  metacritic: { name: 'Metacritic', icon: '/icons/sites/metacritic.png' },
-  trakt: { name: 'Trakt', icon: '/icons/sites/trakt.png' },
-  tmdb: { name: 'TMDB', icon: '/icons/sites/themoviedb.png' },
+  imdb: { name: 'IMDb', icon: `${BASE}icons/sites/imdb.jpg` },
+  letterboxd: { name: 'Letterboxd', icon: `${BASE}icons/sites/letterboxd.png` },
+  rottentomatoes: { name: 'Rotten Tomatoes', icon: `${BASE}icons/sites/rottentomatoes.png` },
+  serializd: { name: 'Serializd', icon: `${BASE}icons/sites/serializd.png` },
+  metacritic: { name: 'Metacritic', icon: `${BASE}icons/sites/metacritic.png` },
+  trakt: { name: 'Trakt', icon: `${BASE}icons/sites/trakt.png` },
+  tmdb: { name: 'TMDB', icon: `${BASE}icons/sites/themoviedb.png` },
 };
 
 const WIKIDATA_PROPS = {

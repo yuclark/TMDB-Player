@@ -9,6 +9,7 @@ import type {
 } from '../types/tmdb';
 
 const IMG_BASE = 'https://image.tmdb.org/t/p';
+const API_BASE = ((import.meta.env.VITE_API_BASE as string | undefined) || '').replace(/\/+$/, '');
 
 export function getPosterUrl(path: string | null | undefined, size: 'w185' | 'w342' | 'w500' = 'w342'): string | null {
   return path ? `${IMG_BASE}/${size}${path}` : null;
@@ -35,8 +36,9 @@ export function formatRuntime(minutes?: number | null): string {
 }
 
 async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(url, {
-    credentials: 'same-origin',
+  const target = url.startsWith('/') ? `${API_BASE}${url}` : url;
+  const res = await fetch(target, {
+    credentials: API_BASE ? 'include' : 'same-origin',
     ...init,
     headers: {
       Accept: 'application/json',

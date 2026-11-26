@@ -134,7 +134,7 @@ export function App() {
   }
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <AppShell authProtected={authState.protected} onLogout={() => void handleLogout()} />
     </BrowserRouter>
   );

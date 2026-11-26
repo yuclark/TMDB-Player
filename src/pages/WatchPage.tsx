@@ -6,6 +6,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ExternalLink,
   ListVideo,
   X,
 } from 'lucide-react';
@@ -287,11 +288,23 @@ export function WatchPage({ type }: WatchPageProps) {
         </div>
 
         <section className="server-panel" aria-label="Streaming servers">
-          <div className="server-panel-header">
-            <span className="server-panel-label">Streaming Source</span>
-            <span className="server-panel-hint">
-              If a stream buffers or fails to load, switch servers below.
-            </span>
+          <div className="server-panel-header" style={{ flexWrap: 'wrap' }}>
+            <div>
+              <span className="server-panel-label">Streaming Source</span>
+              <span className="server-panel-hint" style={{ marginLeft: 12 }}>
+                If a stream buffers or is blocked in-frame, switch servers or open it in a new tab.
+              </span>
+            </div>
+            <a
+              href={iframeSrc}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn-ghost btn-sm"
+              title={`Open ${activeServer.name} in a new tab`}
+            >
+              <ExternalLink size={14} />
+              <span>Open {activeServer.name}</span>
+            </a>
           </div>
 
           <div className="server-grid">

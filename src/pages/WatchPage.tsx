@@ -283,7 +283,6 @@ export function WatchPage({ type }: WatchPageProps) {
             className="player-iframe"
             title={title}
             allowFullScreen
-            referrerPolicy="no-referrer"
           />
         </div>
 

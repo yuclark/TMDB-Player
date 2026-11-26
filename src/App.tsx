@@ -69,7 +69,7 @@ function AppShell({
   }, []);
 
   return (
-    <LibraryProvider enabled={true}>
+    <LibraryProvider>
       <ScrollToTop />
       <LegacyQueryRedirect />
       <Navbar

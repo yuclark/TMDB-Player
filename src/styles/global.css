@@ -612,6 +612,32 @@ button {
   justify-content: center;
 }
 
+.card-dismiss-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 3;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius-xs);
+  background: rgba(9, 9, 11, 0.84);
+  border: 1px solid var(--border-default);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
+}
+
+.media-card:hover .card-dismiss-btn {
+  opacity: 1;
+}
+
+.card-dismiss-btn:hover {
+  color: var(--text-primary);
+}
+
 .card-meta {
   display: flex;
   flex-direction: column;

@@ -1,5 +1,4 @@
 import type {
-  HistoryItem,
   MediaType,
   TmdbDetail,
   TmdbEpisode,
@@ -7,7 +6,6 @@ import type {
   TmdbMediaItem,
   TmdbPagedResponse,
   TmdbSeasonDetail,
-  WatchlistItem,
 } from '../types/tmdb';
 
 const IMG_BASE = 'https://image.tmdb.org/t/p';
@@ -54,7 +52,7 @@ async function apiJson<T>(url: string, init?: RequestInit): Promise<T> {
   return (await res.json()) as T;
 }
 
-// Auth
+// Auth (optional passcode gate)
 export const getAuthStatus = () =>
   apiJson<{ protected: boolean; authenticated: boolean }>('/api/auth/status');
 
@@ -67,7 +65,7 @@ export const loginWithPasscode = (passcode: string) =>
 export const logoutSession = () =>
   apiJson<{ ok: boolean }>('/api/auth/logout', { method: 'POST' });
 
-// TMDB
+// TMDB Catalog
 export const fetchTrending = (type: 'all' | MediaType = 'all', window: 'day' | 'week' = 'week') =>
   apiJson<TmdbPagedResponse<TmdbMediaItem>>(`/api/tmdb/trending/${type}/${window}?language=en-US`);
 
@@ -82,16 +80,21 @@ export const fetchGenres = (type: MediaType) =>
 
 export const discoverMedia = (
   type: MediaType,
-  options: { genreId?: number | null; sortBy?: string; page?: number }
+  options: { genreId?: number | null; genreIds?: number[]; sortBy?: string; page?: number; minVotes?: number; minRating?: number }
 ) => {
   const params = new URLSearchParams({
     language: 'en-US',
     include_adult: 'false',
     page: String(options.page ?? 1),
     sort_by: options.sortBy ?? 'popularity.desc',
-    'vote_count.gte': options.sortBy === 'vote_average.desc' ? '200' : '25',
+    'vote_count.gte': String(options.minVotes ?? (options.sortBy === 'vote_average.desc' ? 200 : 25)),
   });
-  if (options.genreId) {
+  if (options.minRating) {
+    params.set('vote_average.gte', String(options.minRating));
+  }
+  if (options.genreIds?.length) {
+    params.set('with_genres', options.genreIds.join(','));
+  } else if (options.genreId) {
     params.set('with_genres', String(options.genreId));
   }
   return apiJson<TmdbPagedResponse<TmdbMediaItem>>(`/api/tmdb/discover/${type}?${params.toString()}`);
@@ -107,6 +110,9 @@ export const fetchMediaDetail = (type: MediaType, id: number) =>
     `/api/tmdb/${type}/${id}?language=en-US&append_to_response=external_ids,credits,videos,recommendations,similar`
   );
 
+export const fetchMediaRecommendations = (type: MediaType, id: number) =>
+  apiJson<TmdbPagedResponse<TmdbMediaItem>>(`/api/tmdb/${type}/${id}/recommendations?language=en-US&page=1`);
+
 export const fetchSeasonDetail = (tvId: number, seasonNumber: number) =>
   apiJson<TmdbSeasonDetail>(`/api/tmdb/tv/${tvId}/season/${seasonNumber}?language=en-US`);
 
@@ -114,26 +120,3 @@ export const fetchEpisodeDetail = (tvId: number, seasonNumber: number, episodeNu
   apiJson<TmdbEpisode>(
     `/api/tmdb/tv/${tvId}/season/${seasonNumber}/episode/${episodeNumber}?language=en-US&append_to_response=external_ids`
   );
-
-// Shared D1 Watchlist & Continue Watching
-export const fetchWatchlist = () => apiJson<{ items: WatchlistItem[] }>('/api/watchlist');
-
-export const addWatchlistItem = (item: Omit<WatchlistItem, 'added_at'>) =>
-  apiJson<{ ok: boolean; added_at: number }>('/api/watchlist', {
-    method: 'POST',
-    body: JSON.stringify(item),
-  });
-
-export const removeWatchlistItem = (mediaType: MediaType, tmdbId: number) =>
-  apiJson<{ ok: boolean }>(`/api/watchlist/${mediaType}/${tmdbId}`, { method: 'DELETE' });
-
-export const fetchWatchHistory = () => apiJson<{ items: HistoryItem[] }>('/api/history');
-
-export const saveWatchHistory = (item: Omit<HistoryItem, 'updated_at'>) =>
-  apiJson<{ ok: boolean; updated_at: number }>('/api/history', {
-    method: 'POST',
-    body: JSON.stringify(item),
-  });
-
-export const removeWatchHistory = (mediaType: MediaType, tmdbId: number) =>
-  apiJson<{ ok: boolean }>(`/api/history/${mediaType}/${tmdbId}`, { method: 'DELETE' });

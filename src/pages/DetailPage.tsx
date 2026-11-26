@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Bookmark, Check, Clapperboard, Play, Star } from 'lucide-react';
+import { Bookmark, Check, Clapperboard, Play, Star, ThumbsUp } from 'lucide-react';
 import { MediaRail } from '../components/MediaRail';
 import { ReviewDropdown } from '../components/ReviewDropdown';
 import { TrailerModal } from '../components/TrailerModal';
@@ -31,7 +31,7 @@ export function DetailPage({ type }: DetailPageProps) {
   const [trailerOpen, setTrailerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const { history, isInWatchlist, toggleWatchlist } = useLibrary();
+  const { history, isInWatchlist, isLiked, toggleWatchlist, toggleLike, recordView } = useLibrary();
 
   const resumeItem = useMemo(
     () => history.find((h) => h.media_type === type && h.tmdb_id === numericId),
@@ -53,6 +53,12 @@ export function DetailPage({ type }: DetailPageProps) {
       .then((res) => {
         if (cancelled) return;
         setDetail(res);
+        recordView({
+          media_type: type,
+          tmdb_id: res.id,
+          title: getDisplayTitle(res),
+          genre_ids: res.genres.map((g) => g.id),
+        });
         if (type === 'tv' && res.seasons?.length) {
           const regular = res.seasons.filter((s) => s.season_number > 0);
           const defaultSeason = resumeItem?.season ?? regular[0]?.season_number ?? res.seasons[0].season_number;
@@ -224,19 +230,44 @@ export function DetailPage({ type }: DetailPageProps) {
                 type="button"
                 className="btn btn-secondary"
                 onClick={() =>
-                  void toggleWatchlist({
-                    media_type: type,
-                    tmdb_id: detail.id,
-                    title,
-                    poster_path: detail.poster_path,
-                    backdrop_path: detail.backdrop_path,
-                    release_date: detail.release_date || detail.first_air_date || null,
-                    vote_average: detail.vote_average,
-                  })
+                  toggleWatchlist(
+                    {
+                      media_type: type,
+                      tmdb_id: detail.id,
+                      title,
+                      poster_path: detail.poster_path,
+                      backdrop_path: detail.backdrop_path,
+                      release_date: detail.release_date || detail.first_air_date || null,
+                      vote_average: detail.vote_average,
+                    },
+                    detail.genres.map((g) => g.id)
+                  )
                 }
               >
                 {saved ? <Check size={16} /> : <Bookmark size={16} />}
                 <span>{saved ? 'In Watchlist' : 'Add to Watchlist'}</span>
+              </button>
+
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() =>
+                  toggleLike({
+                    media_type: type,
+                    tmdb_id: detail.id,
+                    title,
+                    genre_ids: detail.genres.map((g) => g.id),
+                  })
+                }
+                title="Improve recommendations with titles like this"
+                style={
+                  isLiked(type, detail.id)
+                    ? { borderColor: 'var(--accent)', color: 'var(--accent)' }
+                    : undefined
+                }
+              >
+                <ThumbsUp size={15} fill={isLiked(type, detail.id) ? 'currentColor' : 'none'} />
+                <span>{isLiked(type, detail.id) ? 'Liked' : 'Like'}</span>
               </button>
 
               {trailerKey && (

@@ -1,20 +1,23 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Dices, Play, Trash2, X } from 'lucide-react';
+import { Dices, Play, RotateCcw, Trash2, X } from 'lucide-react';
 import { useLibrary } from '../context/LibraryContext';
 import { getBackdropUrl, getPosterUrl } from '../lib/api';
+import { getTopGenres } from '../lib/recommendations';
 import type { WatchlistItem } from '../types/tmdb';
 
 type TabFilter = 'all' | 'movie' | 'tv';
 
 export function WatchlistPage() {
-  const { watchlist, history, toggleWatchlist, dismissHistory } = useLibrary();
+  const { watchlist, history, taste, toggleWatchlist, dismissHistory, resetTasteProfile } =
+    useLibrary();
   const [filter, setFilter] = useState<TabFilter>('all');
   const [picked, setPicked] = useState<WatchlistItem | null>(null);
 
   const visibleWatchlist = watchlist.filter((item) =>
     filter === 'all' ? true : item.media_type === filter
   );
+  const topGenres = getTopGenres(taste, 6);
 
   const rollRandomPick = () => {
     if (!visibleWatchlist.length) return;
@@ -32,9 +35,9 @@ export function WatchlistPage() {
     <div className="page-shell container">
       <div className="page-header">
         <div>
-          <h1 className="page-title serif-title">Shared Watchlist</h1>
+          <h1 className="page-title serif-title">My Watchlist</h1>
           <p className="page-subtitle">
-            Synced automatically across both of your devices via Cloudflare D1.
+            Stored privately on this browser — no account or login required.
           </p>
         </div>
 
@@ -64,7 +67,7 @@ export function WatchlistPage() {
       {visibleWatchlist.length === 0 ? (
         <div className="empty-state">
           <p style={{ margin: '0 0 12px', color: 'var(--text-primary)' }}>
-            Nothing saved here yet.
+            Nothing saved on this device yet.
           </p>
           <Link to="/" className="btn btn-secondary btn-sm">
             Explore Catalog
@@ -76,8 +79,15 @@ export function WatchlistPage() {
             const poster = getPosterUrl(item.poster_path, 'w342');
             const year = item.release_date ? item.release_date.slice(0, 4) : '';
             return (
-              <div key={`${item.media_type}-${item.tmdb_id}`} className="media-card" style={{ position: 'relative' }}>
-                <Link to={`/${item.media_type}/${item.tmdb_id}`} style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+              <div
+                key={`${item.media_type}-${item.tmdb_id}`}
+                className="media-card"
+                style={{ position: 'relative' }}
+              >
+                <Link
+                  to={`/${item.media_type}/${item.tmdb_id}`}
+                  style={{ display: 'flex', flexDirection: 'column', gap: 9 }}
+                >
                   <div className="poster-frame">
                     {poster ? (
                       <img src={poster} alt={item.title} className="poster-img" loading="lazy" />
@@ -108,7 +118,7 @@ export function WatchlistPage() {
                 <button
                   type="button"
                   onClick={() =>
-                    void toggleWatchlist({
+                    toggleWatchlist({
                       media_type: item.media_type,
                       tmdb_id: item.tmdb_id,
                       title: item.title,
@@ -177,7 +187,7 @@ export function WatchlistPage() {
                     style={{ opacity: 1 }}
                     title="Remove from history"
                     aria-label={`Remove ${item.title}`}
-                    onClick={() => void dismissHistory(item.media_type, item.tmdb_id)}
+                    onClick={() => dismissHistory(item.media_type, item.tmdb_id)}
                   >
                     <X size={13} />
                   </button>
@@ -212,6 +222,44 @@ export function WatchlistPage() {
         </section>
       )}
 
+      {(topGenres.length > 0 || taste.seeds.length > 0) && (
+        <section style={{ marginTop: 64 }}>
+          <div className="server-panel" style={{ marginTop: 0 }}>
+            <div className="server-panel-header" style={{ marginBottom: 14 }}>
+              <div>
+                <div className="server-panel-label">Local Recommendation Engine</div>
+                <div style={{ fontSize: 13, color: 'var(--text-secondary)', marginTop: 4 }}>
+                  Your Home feed adapts locally from what you watch, save, like, and dismiss—no login needed.
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={resetTasteProfile}
+              >
+                <RotateCcw size={13} />
+                <span>Reset Taste</span>
+              </button>
+            </div>
+
+            {topGenres.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {topGenres.map((genre) => (
+                  <Link
+                    key={genre.id}
+                    to={`/movies?genre=${genre.id}`}
+                    className="genre-tag"
+                    style={{ color: 'var(--text-primary)', borderColor: 'var(--border-default)' }}
+                  >
+                    {genre.name}
+                  </Link>
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
+
       {picked && (
         <div
           className="modal-backdrop modal-backdrop--center"
@@ -233,7 +281,16 @@ export function WatchlistPage() {
               />
             )}
             <div className="tonight-body">
-              <div className="mono" style={{ fontSize: 11, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--accent)', marginBottom: 6 }}>
+              <div
+                className="mono"
+                style={{
+                  fontSize: 11,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: 'var(--accent)',
+                  marginBottom: 6,
+                }}
+              >
                 Tonight&rsquo;s Selection
               </div>
               <h2 className="serif-title" style={{ margin: '0 0 6px', fontSize: 32 }}>

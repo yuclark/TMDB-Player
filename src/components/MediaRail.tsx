@@ -6,12 +6,21 @@ import { MediaCard } from './MediaCard';
 
 interface MediaRailProps {
   title: string;
+  subtitle?: string;
   items: TmdbMediaItem[];
   forcedType?: MediaType;
   viewAllTo?: string;
+  onDismissItem?: (item: TmdbMediaItem, type: MediaType) => void;
 }
 
-export function MediaRail({ title, items, forcedType, viewAllTo }: MediaRailProps) {
+export function MediaRail({
+  title,
+  subtitle,
+  items,
+  forcedType,
+  viewAllTo,
+  onDismissItem,
+}: MediaRailProps) {
   const trackRef = useRef<HTMLDivElement>(null);
 
   if (!items.length) return null;
@@ -25,7 +34,14 @@ export function MediaRail({ title, items, forcedType, viewAllTo }: MediaRailProp
   return (
     <section className="container">
       <div className="section-header">
-        <h2 className="section-title">{title}</h2>
+        <div>
+          <h2 className="section-title">{title}</h2>
+          {subtitle && (
+            <div className="mono" style={{ fontSize: 11.5, color: 'var(--text-tertiary)', marginTop: 3 }}>
+              {subtitle}
+            </div>
+          )}
+        </div>
         {viewAllTo && (
           <Link to={viewAllTo} className="section-link">
             <span>Browse all</span>
@@ -50,6 +66,7 @@ export function MediaRail({ title, items, forcedType, viewAllTo }: MediaRailProp
               key={`${forcedType ?? item.media_type ?? 'm'}-${item.id}`}
               item={item}
               forcedType={forcedType}
+              onDismiss={onDismissItem}
             />
           ))}
         </div>

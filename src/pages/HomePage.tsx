@@ -12,6 +12,7 @@ import {
   getDisplayTitle,
   getReleaseYear,
 } from '../lib/api';
+import { buildRecommendationFeed, type RecommendationFeed } from '../lib/recommendations';
 import type { MediaType, TmdbMediaItem } from '../types/tmdb';
 
 interface HomeData {
@@ -24,9 +25,11 @@ interface HomeData {
 
 export function HomePage() {
   const [data, setData] = useState<HomeData | null>(null);
+  const [recs, setRecs] = useState<RecommendationFeed | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [heroIdx, setHeroIdx] = useState(0);
-  const { isInWatchlist, toggleWatchlist } = useLibrary();
+  const { watchlist, history, taste, isInWatchlist, toggleWatchlist, dismissRecommendation } =
+    useLibrary();
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +61,19 @@ export function HomePage() {
     };
   }, []);
 
+  // Recompute personalized client-side recommendation rails whenever local activity changes
+  useEffect(() => {
+    let cancelled = false;
+    buildRecommendationFeed(taste, watchlist, history)
+      .then((feed) => {
+        if (!cancelled) setRecs(feed);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [taste, watchlist, history]);
+
   const featured = data?.trending.filter((m) => Boolean(m.backdrop_path)).slice(0, 5) ?? [];
   const activeHero = featured[heroIdx] ?? featured[0];
 
@@ -68,6 +84,15 @@ export function HomePage() {
     }, 10000);
     return () => window.clearInterval(timer);
   }, [featured.length]);
+
+  const handleDismissRec = (item: TmdbMediaItem, type: MediaType) => {
+    dismissRecommendation({
+      media_type: type,
+      tmdb_id: item.id,
+      title: getDisplayTitle(item),
+      genre_ids: item.genre_ids,
+    });
+  };
 
   if (error) {
     return (
@@ -105,6 +130,14 @@ export function HomePage() {
   const heroWatchTo =
     heroType === 'tv' ? `/watch/tv/${activeHero.id}/1/1` : `/watch/movie/${activeHero.id}`;
   const saved = isInWatchlist(heroType, activeHero.id);
+
+  const genreHint =
+    recs && recs.topGenres.length > 0
+      ? `Tuned on this device · ${recs.topGenres
+          .slice(0, 3)
+          .map((g) => g.name)
+          .join(', ')}`
+      : 'Tuned locally from your recent watches and saves';
 
   return (
     <div>
@@ -158,15 +191,18 @@ export function HomePage() {
                 type="button"
                 className="btn btn-secondary"
                 onClick={() =>
-                  void toggleWatchlist({
-                    media_type: heroType,
-                    tmdb_id: activeHero.id,
-                    title: heroTitle,
-                    poster_path: activeHero.poster_path,
-                    backdrop_path: activeHero.backdrop_path,
-                    release_date: activeHero.release_date || activeHero.first_air_date || null,
-                    vote_average: activeHero.vote_average,
-                  })
+                  toggleWatchlist(
+                    {
+                      media_type: heroType,
+                      tmdb_id: activeHero.id,
+                      title: heroTitle,
+                      poster_path: activeHero.poster_path,
+                      backdrop_path: activeHero.backdrop_path,
+                      release_date: activeHero.release_date || activeHero.first_air_date || null,
+                      vote_average: activeHero.vote_average,
+                    },
+                    activeHero.genre_ids
+                  )
                 }
               >
                 {saved ? <Check size={16} /> : <Bookmark size={16} />}
@@ -197,6 +233,25 @@ export function HomePage() {
 
       <div className="home-sections">
         <ContinueWatchingRail />
+
+        {recs?.forYou && recs.forYou.length > 0 && (
+          <MediaRail
+            title="Recommended for You"
+            subtitle={genreHint}
+            items={recs.forYou}
+            onDismissItem={handleDismissRec}
+          />
+        )}
+
+        {recs?.becauseYouSeed && recs.becauseYouSeed.items.length > 0 && (
+          <MediaRail
+            title={`Because you liked ${recs.becauseYouSeed.title}`}
+            items={recs.becauseYouSeed.items}
+            forcedType={recs.becauseYouSeed.type}
+            onDismissItem={handleDismissRec}
+          />
+        )}
+
         <MediaRail title="Trending This Week" items={data.trending} />
         <MediaRail
           title="Now Playing"

@@ -86,21 +86,24 @@ export function WatchPage({ type }: WatchPageProps) {
     return seasonCache[season]?.episodes.find((ep) => ep.episode_number === episode) ?? null;
   }, [type, season, episode, seasonCache]);
 
-  // Persist Continue Watching to shared D1 history
+  // Persist Continue Watching & taste signals locally on this device
   useEffect(() => {
     if (!detail) return;
     const title = getDisplayTitle(detail);
-    void recordWatch({
-      media_type: type,
-      tmdb_id: detail.id,
-      title,
-      poster_path: detail.poster_path,
-      backdrop_path: detail.backdrop_path,
-      season: type === 'tv' ? season ?? 1 : null,
-      episode: type === 'tv' ? episode ?? 1 : null,
-      episode_name: currentEpisodeObj?.name ?? null,
-      server_id: serverId,
-    });
+    recordWatch(
+      {
+        media_type: type,
+        tmdb_id: detail.id,
+        title,
+        poster_path: detail.poster_path,
+        backdrop_path: detail.backdrop_path,
+        season: type === 'tv' ? season ?? 1 : null,
+        episode: type === 'tv' ? episode ?? 1 : null,
+        episode_name: currentEpisodeObj?.name ?? null,
+        server_id: serverId,
+      },
+      detail.genres.map((g) => g.id)
+    );
   }, [detail, type, season, episode, currentEpisodeObj?.name, serverId, recordWatch]);
 
   const regularSeasons = useMemo(() => {
@@ -243,15 +246,18 @@ export function WatchPage({ type }: WatchPageProps) {
                   type="button"
                   className="btn btn-ghost btn-sm"
                   onClick={() =>
-                    void toggleWatchlist({
-                      media_type: type,
-                      tmdb_id: detail.id,
-                      title,
-                      poster_path: detail.poster_path,
-                      backdrop_path: detail.backdrop_path,
-                      release_date: detail.release_date || detail.first_air_date || null,
-                      vote_average: detail.vote_average,
-                    })
+                    toggleWatchlist(
+                      {
+                        media_type: type,
+                        tmdb_id: detail.id,
+                        title,
+                        poster_path: detail.poster_path,
+                        backdrop_path: detail.backdrop_path,
+                        release_date: detail.release_date || detail.first_air_date || null,
+                        vote_average: detail.vote_average,
+                      },
+                      detail.genres.map((g) => g.id)
+                    )
                   }
                   title={saved ? 'Remove from Watchlist' : 'Add to Watchlist'}
                 >

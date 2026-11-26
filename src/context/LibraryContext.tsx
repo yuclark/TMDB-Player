@@ -1,49 +1,66 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
-  addWatchlistItem,
-  fetchWatchHistory,
-  fetchWatchlist,
-  removeWatchHistory,
-  removeWatchlistItem,
-  saveWatchHistory,
-} from '../lib/api';
+  applyTasteSignal,
+  EMPTY_TASTE_PROFILE,
+  mediaKey,
+  type TasteProfile,
+} from '../lib/recommendations';
 import type { HistoryItem, MediaType, WatchlistItem } from '../types/tmdb';
 
-interface LibraryContextValue {
+const WATCHLIST_KEY = 'kino_watchlist_v1';
+const HISTORY_KEY = 'kino_history_v1';
+const TASTE_KEY = 'kino_taste_v1';
+
+function readStorage<T>(key: string, fallback: T): T {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStorage(key: string, value: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    // Ignore storage quota errors
+  }
+}
+
+export interface LibraryContextValue {
   watchlist: WatchlistItem[];
   history: HistoryItem[];
-  loading: boolean;
+  taste: TasteProfile;
   isInWatchlist: (type: MediaType, id: number) => boolean;
-  toggleWatchlist: (item: Omit<WatchlistItem, 'added_at'>) => Promise<void>;
-  recordWatch: (item: Omit<HistoryItem, 'updated_at'>) => Promise<void>;
-  dismissHistory: (type: MediaType, id: number) => Promise<void>;
-  refresh: () => Promise<void>;
+  isLiked: (type: MediaType, id: number) => boolean;
+  isDismissed: (type: MediaType, id: number) => boolean;
+  toggleWatchlist: (item: Omit<WatchlistItem, 'added_at'>, genreIds?: number[]) => void;
+  recordWatch: (item: Omit<HistoryItem, 'updated_at'>, genreIds?: number[]) => void;
+  recordView: (meta: { media_type: MediaType; tmdb_id: number; title: string; genre_ids?: number[] }) => void;
+  toggleLike: (meta: { media_type: MediaType; tmdb_id: number; title: string; genre_ids?: number[] }) => void;
+  dismissRecommendation: (meta: { media_type: MediaType; tmdb_id: number; title: string; genre_ids?: number[] }) => void;
+  dismissHistory: (type: MediaType, id: number) => void;
+  resetTasteProfile: () => void;
 }
 
 const LibraryContext = createContext<LibraryContextValue | null>(null);
 
-export function LibraryProvider({ children, enabled }: { children: ReactNode; enabled: boolean }) {
-  const [watchlist, setWatchlist] = useState<WatchlistItem[]>([]);
-  const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [loading, setLoading] = useState(false);
+export function LibraryProvider({ children }: { children: ReactNode }) {
+  const [watchlist, setWatchlist] = useState<WatchlistItem[]>(() =>
+    readStorage<WatchlistItem[]>(WATCHLIST_KEY, [])
+  );
+  const [history, setHistory] = useState<HistoryItem[]>(() =>
+    readStorage<HistoryItem[]>(HISTORY_KEY, [])
+  );
+  const [taste, setTaste] = useState<TasteProfile>(() =>
+    readStorage<TasteProfile>(TASTE_KEY, EMPTY_TASTE_PROFILE)
+  );
 
-  const refresh = useCallback(async () => {
-    if (!enabled) return;
-    setLoading(true);
-    try {
-      const [w, h] = await Promise.all([fetchWatchlist(), fetchWatchHistory()]);
-      setWatchlist(w.items);
-      setHistory(h.items);
-    } catch {
-      // Keep current state on transient errors
-    } finally {
-      setLoading(false);
-    }
-  }, [enabled]);
-
-  useEffect(() => {
-    void refresh();
-  }, [refresh]);
+  useEffect(() => writeStorage(WATCHLIST_KEY, watchlist), [watchlist]);
+  useEffect(() => writeStorage(HISTORY_KEY, history), [history]);
+  useEffect(() => writeStorage(TASTE_KEY, taste), [taste]);
 
   const isInWatchlist = useCallback(
     (type: MediaType, id: number) =>
@@ -51,8 +68,18 @@ export function LibraryProvider({ children, enabled }: { children: ReactNode; en
     [watchlist]
   );
 
+  const isLiked = useCallback(
+    (type: MediaType, id: number) => taste.liked.includes(mediaKey(type, id)),
+    [taste.liked]
+  );
+
+  const isDismissed = useCallback(
+    (type: MediaType, id: number) => taste.dismissed.includes(mediaKey(type, id)),
+    [taste.dismissed]
+  );
+
   const toggleWatchlist = useCallback(
-    async (item: Omit<WatchlistItem, 'added_at'>) => {
+    (item: Omit<WatchlistItem, 'added_at'>, genreIds?: number[]) => {
       const exists = watchlist.some(
         (w) => w.media_type === item.media_type && w.tmdb_id === item.tmdb_id
       );
@@ -61,60 +88,113 @@ export function LibraryProvider({ children, enabled }: { children: ReactNode; en
         setWatchlist((prev) =>
           prev.filter((w) => !(w.media_type === item.media_type && w.tmdb_id === item.tmdb_id))
         );
-        try {
-          await removeWatchlistItem(item.media_type, item.tmdb_id);
-        } catch {
-          void refresh();
-        }
       } else {
-        const optimistic: WatchlistItem = { ...item, added_at: Date.now() };
-        setWatchlist((prev) => [optimistic, ...prev]);
-        try {
-          await addWatchlistItem(item);
-        } catch {
-          void refresh();
-        }
+        const entry: WatchlistItem = { ...item, added_at: Date.now() };
+        setWatchlist((prev) => [entry, ...prev]);
+        setTaste((prev) =>
+          applyTasteSignal(prev, {
+            media_type: item.media_type,
+            tmdb_id: item.tmdb_id,
+            title: item.title,
+            genre_ids: genreIds,
+            weight: 3,
+          })
+        );
       }
     },
-    [watchlist, refresh]
+    [watchlist]
   );
 
-  const recordWatch = useCallback(async (item: Omit<HistoryItem, 'updated_at'>) => {
-    const entry: HistoryItem = { ...item, updated_at: Date.now() };
-    setHistory((prev) => [
-      entry,
-      ...prev.filter((h) => !(h.media_type === item.media_type && h.tmdb_id === item.tmdb_id)),
-    ]);
-    try {
-      await saveWatchHistory(item);
-    } catch {
-      // Non-fatal
-    }
+  const recordWatch = useCallback(
+    (item: Omit<HistoryItem, 'updated_at'>, genreIds?: number[]) => {
+      const entry: HistoryItem = { ...item, updated_at: Date.now() };
+      setHistory((prev) => [
+        entry,
+        ...prev.filter((h) => !(h.media_type === item.media_type && h.tmdb_id === item.tmdb_id)),
+      ].slice(0, 40));
+
+      setTaste((prev) =>
+        applyTasteSignal(prev, {
+          media_type: item.media_type,
+          tmdb_id: item.tmdb_id,
+          title: item.title,
+          genre_ids: genreIds,
+          weight: 4,
+        })
+      );
+    },
+    []
+  );
+
+  const recordView = useCallback(
+    (meta: { media_type: MediaType; tmdb_id: number; title: string; genre_ids?: number[] }) => {
+      setTaste((prev) =>
+        applyTasteSignal(prev, {
+          ...meta,
+          weight: 1,
+        })
+      );
+    },
+    []
+  );
+
+  const toggleLike = useCallback(
+    (meta: { media_type: MediaType; tmdb_id: number; title: string; genre_ids?: number[] }) => {
+      const key = mediaKey(meta.media_type, meta.tmdb_id);
+      setTaste((prev) => {
+        if (prev.liked.includes(key)) {
+          return {
+            ...prev,
+            liked: prev.liked.filter((k) => k !== key),
+          };
+        }
+        return applyTasteSignal(prev, {
+          ...meta,
+          weight: 5,
+          markLiked: true,
+        });
+      });
+    },
+    []
+  );
+
+  const dismissRecommendation = useCallback(
+    (meta: { media_type: MediaType; tmdb_id: number; title: string; genre_ids?: number[] }) => {
+      setTaste((prev) =>
+        applyTasteSignal(prev, {
+          ...meta,
+          weight: -3,
+          markDismissed: true,
+        })
+      );
+    },
+    []
+  );
+
+  const dismissHistory = useCallback((type: MediaType, id: number) => {
+    setHistory((prev) => prev.filter((h) => !(h.media_type === type && h.tmdb_id === id)));
   }, []);
 
-  const dismissHistory = useCallback(
-    async (type: MediaType, id: number) => {
-      setHistory((prev) => prev.filter((h) => !(h.media_type === type && h.tmdb_id === id)));
-      try {
-        await removeWatchHistory(type, id);
-      } catch {
-        void refresh();
-      }
-    },
-    [refresh]
-  );
+  const resetTasteProfile = useCallback(() => {
+    setTaste(EMPTY_TASTE_PROFILE);
+  }, []);
 
   return (
     <LibraryContext.Provider
       value={{
         watchlist,
         history,
-        loading,
+        taste,
         isInWatchlist,
+        isLiked,
+        isDismissed,
         toggleWatchlist,
         recordWatch,
+        recordView,
+        toggleLike,
+        dismissRecommendation,
         dismissHistory,
-        refresh,
+        resetTasteProfile,
       }}
     >
       {children}

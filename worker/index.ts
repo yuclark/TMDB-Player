@@ -1,7 +1,8 @@
 export interface Env {
   TMDB_TOKEN: string;
   APP_PASSCODE?: string;
-  ASSETS: Fetcher;
+  ASSETS?: Fetcher;
+  ASSET_ORIGIN?: string;
 }
 
 const SESSION_COOKIE = 'kino_session';
@@ -16,6 +17,27 @@ const ALLOWED_TMDB_PREFIXES = [
   'genre/',
   'configuration',
 ];
+
+const MIME_TYPES: Record<string, string> = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'application/javascript; charset=utf-8',
+  '.mjs': 'application/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+};
+
+function getMimeType(pathname: string): string {
+  const dot = pathname.lastIndexOf('.');
+  if (dot === -1) return 'application/octet-stream';
+  return MIME_TYPES[pathname.slice(dot).toLowerCase()] ?? 'application/octet-stream';
+}
 
 function jsonResponse(data: unknown, status = 200, headers: HeadersInit = {}): Response {
   const merged = new Headers(headers);
@@ -177,6 +199,39 @@ async function handleTmdbProxy(request: Request, url: URL, env: Env): Promise<Re
   });
 }
 
+async function handleRemoteAsset(url: URL, assetOrigin: string): Promise<Response> {
+  const base = assetOrigin.replace(/\/+$/, '');
+  const isStaticFile = /\.[a-z0-9]{2,5}$/i.test(url.pathname) && !url.pathname.includes('..');
+  const targetPath = isStaticFile ? url.pathname : '/index.html';
+
+  const res = await fetch(`${base}${targetPath}`, {
+    cf: {
+      cacheEverything: true,
+      cacheTtl: isStaticFile ? 86400 : 300,
+    },
+  });
+
+  if (!res.ok) {
+    if (isStaticFile) {
+      return new Response('Not found', { status: 404 });
+    }
+    return new Response('Application bundle unavailable', { status: 502 });
+  }
+
+  const headers = new Headers();
+  headers.set('Content-Type', getMimeType(targetPath));
+  headers.set(
+    'Cache-Control',
+    targetPath.startsWith('/assets/')
+      ? 'public, max-age=31536000, immutable'
+      : targetPath === '/index.html'
+        ? 'public, max-age=120'
+        : 'public, max-age=86400'
+  );
+
+  return new Response(res.body, { status: 200, headers });
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -202,6 +257,14 @@ export default {
       }
     }
 
-    return env.ASSETS.fetch(request);
+    if (env.ASSETS) {
+      return env.ASSETS.fetch(request);
+    }
+
+    if (env.ASSET_ORIGIN) {
+      return handleRemoteAsset(url, env.ASSET_ORIGIN);
+    }
+
+    return new Response('Static assets not configured', { status: 500 });
   },
 } satisfies ExportedHandler<Env>;
